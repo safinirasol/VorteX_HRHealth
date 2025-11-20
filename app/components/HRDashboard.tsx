@@ -1,6 +1,8 @@
 // components/HRDashboard.tsx
 'use client'
 import { useState, useEffect } from 'react'
+import NotificationToast, { Toast } from './NotificationToast'
+import ConfirmModal from './ConfirmModal'
 
 interface DashboardData {
   summary: {
@@ -39,6 +41,10 @@ export default function HRDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'employees'>('overview')
+  const [riskFilter, setRiskFilter] = useState<'All' | 'High' | 'Medium' | 'Low'>('All')
+  const [sendingEmail, setSendingEmail] = useState<number | null>(null)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; employeeId?: number; employeeName?: string; employeeEmail?: string }>({ isOpen: false })
 
   useEffect(() => {
     fetchDashboardData()
@@ -80,6 +86,94 @@ export default function HRDashboard() {
     return score >= 70 ? 'High' : score >= 40 ? 'Medium' : 'Low'
   }
 
+  const filteredEmployees = riskFilter === 'All' 
+    ? employees 
+    : employees.filter(e => e.latest_risk_label === riskFilter)
+
+  const handleSendEmail = async (employeeId: number, employeeName: string, employeeEmail: string) => {
+    openConfirmModal(employeeId, employeeName, employeeEmail)
+  }
+
+  const addToast = (type: Toast['type'], title: string, message?: string, duration: number = 4000) => {
+    const id = Date.now().toString()
+    setToasts((prev) => [...prev, { id, type, title, message, duration }])
+    return id
+  }
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  const openConfirmModal = (employeeId: number, employeeName: string, employeeEmail: string) => {
+    setConfirmModal({ isOpen: true, employeeId, employeeName, employeeEmail })
+  }
+
+  const closeConfirmModal = () => {
+    setConfirmModal({ isOpen: false })
+  }
+
+  const handleConfirmSendEmail = async () => {
+    const { employeeId, employeeName, employeeEmail } = confirmModal
+    if (!employeeId || !employeeName || !employeeEmail) return
+
+    setSendingEmail(employeeId)
+    try {
+      const res = await fetch('/api/employees/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId, employeeName, employeeEmail }),
+      })
+      if (res.ok) {
+        addToast('success', 'Email Sent', `Burnout advisory email sent to ${employeeName}`, 5000)
+      } else {
+        addToast('error', 'Failed to Send Email', 'Please try again later', 5000)
+      }
+    } catch (error) {
+      console.error('Error sending email:', error)
+      addToast('error', 'Error', 'An error occurred while sending the email', 5000)
+    } finally {
+      setSendingEmail(null)
+      closeConfirmModal()
+    }
+  }
+
+  const handleGenerateReport = async () => {
+    const infoId = addToast('info', 'Generating Report', 'Please wait...', 0)
+    try {
+      const res = await fetch('/api/employees/export-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ riskFilter: riskFilter === 'All' ? null : riskFilter, format: 'pdf' }),
+      })
+
+      if (res.ok) {
+        const contentType = res.headers.get('Content-Type') || ''
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        if (contentType.includes('pdf')) {
+          a.download = `burnout-report-${new Date().toISOString().split('T')[0]}.pdf`
+        } else {
+          a.download = `burnout-report-${new Date().toISOString().split('T')[0]}.html`
+        }
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        addToast('success', 'Report Generated', 'Your report has been downloaded successfully', 5000)
+      } else {
+        addToast('error', 'Failed to Generate Report', 'Please try again later', 5000)
+      }
+    } catch (error) {
+      console.error('Error generating report:', error)
+      addToast('error', 'Error', 'An error occurred while generating the report', 5000)
+    } finally {
+      // remove the 'Generating' toast
+      if (infoId) removeToast(infoId)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
@@ -90,6 +184,20 @@ export default function HRDashboard() {
 
   return (
     <div className="p-6">
+      <NotificationToast toasts={toasts} onRemove={removeToast} />
+      
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title="Send Risk Advisory Email"
+        message={`Send a burnout risk advisory email to ${confirmModal.employeeName}? They will receive guidance on managing their stress and wellness resources.`}
+        actionLabel="Send Email"
+        cancelLabel="Cancel"
+        isDangerous={false}
+        isLoading={sendingEmail === confirmModal.employeeId}
+        onConfirm={handleConfirmSendEmail}
+        onCancel={closeConfirmModal}
+      />
+
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">HR Dashboard</h1>
         <p className="text-gray-600">Employee Burnout Monitoring</p>
@@ -125,6 +233,14 @@ export default function HRDashboard() {
 
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          <div className="flex justify-end">
+            <button
+              onClick={handleGenerateReport}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium text-sm"
+            >
+              📥 Generate Report
+            </button>
+          </div>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-lg shadow-sm border">
@@ -236,7 +352,24 @@ export default function HRDashboard() {
       {activeTab === 'employees' && (
         <div className="bg-white rounded-lg shadow-sm border">
           <div className="p-6 border-b">
-            <h3 className="text-lg font-semibold text-gray-900">All Employees</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">All Employees ({filteredEmployees.length})</h3>
+              <div className="flex gap-2">
+                {['All', 'High', 'Medium', 'Low'].map((risk) => (
+                  <button
+                    key={risk}
+                    onClick={() => setRiskFilter(risk as 'All' | 'High' | 'Medium' | 'Low')}
+                    className={`px-3 py-1 rounded text-sm font-medium transition ${
+                      riskFilter === risk
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {risk}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -248,11 +381,12 @@ export default function HRDashboard() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Risk Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Submission</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verified</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {employees.length > 0 ? (
-                  employees.map((employee) => (
+                {filteredEmployees.length > 0 ? (
+                  filteredEmployees.map((employee) => (
                     <tr key={employee.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{employee.name}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{employee.department}</td>
@@ -276,11 +410,22 @@ export default function HRDashboard() {
                           </span>
                         )}
                       </td>
+                      <td className="px-6 py-4 text-sm">
+                        {employee.latest_risk_label === 'High' && (
+                          <button
+                            onClick={() => handleSendEmail(employee.id, employee.name, employee.email)}
+                            disabled={sendingEmail === employee.id}
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 font-medium text-xs"
+                          >
+                            {sendingEmail === employee.id ? 'Sending...' : 'Send Email'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                       No employees found
                     </td>
                   </tr>

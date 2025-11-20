@@ -2,10 +2,12 @@
 "use client"
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import CareChatbot from './CareChatbot'
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [logoSrc, setLogoSrc] = useState('/api/logo')
+  const [showCare, setShowCare] = useState(false)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -29,12 +31,13 @@ export default function Navbar() {
           <Link href="/hr" className="text-sm font-medium text-slate-600 hover:text-slate-900">HR Dashboard</Link>
           <Link href="#employees" className="text-sm font-medium text-slate-600 hover:text-slate-900">Employees</Link>
           <Link href="#about" className="text-sm font-medium text-slate-600 hover:text-slate-900">About</Link>
-          <Link href="#care" className="btn btn-care text-sm">Care</Link>
+          <button onClick={() => setShowCare(true)} className="btn btn-care text-sm">Care</button>
           <a href="/" aria-label="Brand Logo" className="block ml-2">
             <img src={logoSrc} onError={handleLogoError} alt="Logo" className="h-8 w-auto rounded-md shadow-card" />
           </a>
         </div>
       </nav>
+      <CareChatbot open={showCare} onClose={() => setShowCare(false)} />
     </header>
   )
 }
