@@ -1,70 +1,125 @@
-# WellMind – VorteX HR Automation
-# File: backend/services/hedera_service.py
-# Description: Sends hashed audit records to Hedera Hashgraph for immutable transparency
-# Author: Ahmad Yasser (Technical Architecture)
-# License: MIT
-
 import hashlib
 import os
 import json
+from dotenv import load_dotenv
+
+# Hiero SDK imports - these should work now
+from hiero_sdk_python import (
+    Client,
+    AccountId,
+    PrivateKey,
+    Network,
+    TopicMessageSubmitTransaction,
+    TopicId,
+    FileCreateTransaction,
+    ResponseCode
+)
+
+# Load environment variables
+load_dotenv()
 
 def store_hash_on_hedera(record):
     """
-    Store a hash of the burnout result on Hedera testnet for audit trail
-    
+    Store a hashed burnout record on Hedera Testnet for audit trail.
+
     Args:
-        record (dict): BurnoutResult data to hash and store
-    
+        record (dict): BurnoutResult data
     Returns:
-        str: Hedera transaction ID or file ID
+        str: Hedera transaction or simulated ID
     """
-    
-    hedera_account_id = os.getenv('HEDERA_ACCOUNT_ID')
-    hedera_private_key = os.getenv('HEDERA_PRIVATE_KEY')
-    
+
+    # Try different environment variable names for compatibility
+    hedera_account_id = (
+        os.getenv('HEDERA_ACCOUNT_ID') or 
+        os.getenv('OPERATOR_ID')
+    )
+    hedera_private_key = (
+        os.getenv('HEDERA_PRIVATE_KEY') or 
+        os.getenv('OPERATOR_KEY')
+    )
+    hedera_topic_id = os.getenv('HEDERA_TOPIC_ID')
+
+    # Validate environment variables
     if not hedera_account_id or not hedera_private_key:
         print("Hedera credentials not configured, simulating transaction")
         return _simulate_hedera_tx(record)
-    
+
     try:
-        from hedera import (
-            Client,
-            PrivateKey,
-            AccountId,
-            FileCreateTransaction
-        )
+        # Initialize client
+        network_name = os.getenv('NETWORK', 'testnet').lower()
+        network = Network(network_name)
+        client = Client(network)
         
-        # Initialize Hedera client
-        client = Client.for_testnet()
-        client.set_operator(
-            AccountId.from_string(hedera_account_id),
-            PrivateKey.from_string(hedera_private_key)
-        )
+        print(f"🔗 Connecting to Hedera {network_name} network")
+
+        # Set operator
+        operator_id = AccountId.from_string(hedera_account_id)
+        operator_key = PrivateKey.from_string(hedera_private_key)
+        client.set_operator(operator_id, operator_key)
         
-        # Hash the record
+        print(f"👤 Client set up with operator: {client.operator_account_id}")
+
+        # Hash record for audit trail
         record_str = json.dumps(record, sort_keys=True)
         record_hash = hashlib.sha256(record_str.encode()).hexdigest()
+
+        payload = {
+            "event": "burnout_score",
+            "record_id": record.get("id"),
+            "risk_label": record.get("label"),
+            "risk_score": record.get("risk_score"),
+            "hash": record_hash,
+            "ts": record.get("watson_timestamp"),
+            "employee_id": record.get("employee_id")
+        }
+        message = json.dumps(payload)
+
+        # If Topic ID exists, publish to topic (HCS)
+        if hedera_topic_id:
+            topic_id = TopicId.from_string(hedera_topic_id.strip())
+            
+            print(f"📝 Submitting message to topic: {topic_id}")
+            
+            # Create and execute transaction
+            transaction = (
+                TopicMessageSubmitTransaction(topic_id=topic_id, message=message)
+                .freeze_with(client)
+                .sign(operator_key)
+            )
+
+            receipt = transaction.execute(client)
+            tx_id = receipt.transaction_id
+            
+            print(f"✅ Success! Message submitted to topic {topic_id}")
+            print(f"📄 Transaction ID: {tx_id}")
+            print(f"📊 Transaction status: {ResponseCode(receipt.status).name}")
+            
+            return f"topic:{topic_id}:{tx_id}"
+
+        # Fallback: FileCreateTransaction (if no topic ID)
+        print("📁 No topic ID configured, creating file instead...")
         
-        # Store hash on Hedera
-        tx = FileCreateTransaction() \
-            .set_contents(record_hash.encode()) \
-            .execute(client)
+        transaction = (
+            FileCreateTransaction(contents=record_hash.encode())
+            .freeze_with(client)
+            .sign(operator_key)
+        )
         
-        receipt = tx.get_receipt(client)
-        file_id = str(receipt.file_id)
+        receipt = transaction.execute(client)
+        file_id = receipt.file_id
         
-        print(f"Hedera audit stored: {file_id}")
-        return file_id
-        
-    except ImportError:
-        print("Hedera SDK not installed, simulating transaction")
-        return _simulate_hedera_tx(record)
+        print(f"✅ Success! File created: {file_id}")
+        return f"file:{file_id}"
+
     except Exception as e:
-        print(f"Hedera transaction failed: {e}")
+        print(f"❌ Hedera error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return _simulate_hedera_tx(record)
 
+
 def _simulate_hedera_tx(record):
-    """Generate a simulated transaction ID for demo purposes"""
+    """Simulation fallback for dev/testing"""
     record_str = json.dumps(record, sort_keys=True)
     record_hash = hashlib.sha256(record_str.encode()).hexdigest()
-    return f"0.0.{record.get('id', 9999)}-{record_hash[:8]}"
+    return f"simulate-{record.get('id', 9999)}-{record_hash[:10]}"

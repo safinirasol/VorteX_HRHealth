@@ -15,11 +15,7 @@ async function tryRead(...candidates: string[]) {
 export async function GET() {
   const cwd = process.cwd()
   const candidates = [
-    path.join(cwd, 'public', 'logosoft.png.jpg'),
-    path.join(cwd, 'public', 'logosoft.png'),
-    path.join(cwd, 'logosoft.png.jpg'),
-    path.join(cwd, 'logosoft.png'),
-    path.join(cwd, 'public', 'logo-fallback.svg'),
+    path.join(cwd, 'public', 'Wellmind-LOGO.jpeg'),
   ]
 
   const res = await tryRead(...candidates)

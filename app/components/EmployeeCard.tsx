@@ -28,7 +28,6 @@ export default function EmployeeCard({ name, risk, department }: EmployeeCardPro
       </div>
 
       <div className="mt-3 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-        <span>Last check: 2h ago</span>
         <span className="h-1 w-1 rounded-full bg-slate-400" />
         <span>Trend: Stable</span>
       </div>

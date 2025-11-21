@@ -23,18 +23,15 @@ export default function Navbar() {
     <header className={`fixed top-0 inset-x-0 z-40 transition-all ${scrolled ? 'backdrop-blur bg-white/80 shadow-card' : 'bg-white/90'} border-b border-slate-200`}>
       <nav className="max-w-7xl mx-auto flex items-center justify-between px-6 py-2.5">
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="h-9 w-9 rounded-lg bg-gradient-glow animate-pulseGlow" />
+          <a href="/" aria-label="Brand Logo" className="block ml-2">
+            <img src={logoSrc} onError={handleLogoError} alt="Logo" className="h-8 w-auto rounded-md shadow-card" />
+          </a>
           <span className="font-bold text-lg tracking-tight text-slate-800">vorteX Health</span>
         </Link>
         <div className="flex items-center gap-4">
           <Link href="/" className="text-sm font-medium text-slate-600 hover:text-slate-900">Home</Link>
           <Link href="/hr" className="text-sm font-medium text-slate-600 hover:text-slate-900">HR Dashboard</Link>
-          <Link href="#employees" className="text-sm font-medium text-slate-600 hover:text-slate-900">Employees</Link>
-          <Link href="#about" className="text-sm font-medium text-slate-600 hover:text-slate-900">About</Link>
           <button onClick={() => setShowCare(true)} className="btn btn-care text-sm">Care</button>
-          <a href="/" aria-label="Brand Logo" className="block ml-2">
-            <img src={logoSrc} onError={handleLogoError} alt="Logo" className="h-8 w-auto rounded-md shadow-card" />
-          </a>
         </div>
       </nav>
       <CareChatbot open={showCare} onClose={() => setShowCare(false)} />

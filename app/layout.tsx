@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`page-shell ${fontSans.variable} font-sans`}>
         <ToastProvider>
           <Navbar />
-          <div className="relative">
+          <div className="relative flex-1">
             <div className="pointer-events-none absolute inset-0 bg-gradient-radial" />
             <main className="relative container mx-auto px-6 md:px-10 py-10">
               {children}
