@@ -5,9 +5,8 @@ This is a hackathon-ready starter template for:
 
 What’s included:
 - Next.js (App Router + TypeScript) minimal frontend
-- API routes for /api/predict, /api/watson, /api/hedera
+- API routes for /api/predict, /api/hedera and more
 - Mock AI prediction (local rule-based)
-- Watson Orchestrate placeholder call
 - Hedera SDK testnet example (requires env vars)
 - Tailwind CSS setup (minimal)
 
